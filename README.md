@@ -1,6 +1,6 @@
 # Arduino-Weaponry
 
-## Here are my very first projects!
+**Here are my very first projects!**
 
 ## Automatic-Reloading-Crossbow (ARC)
 The Automatic Reloading Crossbow is a final project from my introductory electrical engineering class (ECE110), built and programmed with the help of a partner (Aniruddha Pispati), but the design is very original! It's built out of cardboard, paper, and chopsticks, and does exactly what its name suggests- it fires little cardboard darts. With the help of an ultrasonic range sensor in the front, this crossbow has the potential to automatically sense and fire upon any movement it detects- however, both its firing and detection range are quite low- about 3 ft. (and that was years ago, and now the crossbow is deteriorating in storage). It's reloading mechanism is quite clever- a cardboard cartridge held above the firing tube gravity-feeds darts one by one with the help of a servo. However, the full motion of pulling back the arms, dropping a dart, and firing, takes upwards of 2 seconds per shot. Overall, a very fun project to look at, but it falls short of any reasonable functions you might expect of even a cardboard crossbow.
