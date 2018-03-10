@@ -1,11 +1,11 @@
 // SwagBlaster 3001 code
 // wire guide:
-// yellow- gate1                            pin 2         
+// yellow- gate1                            pin 2
 // taped purple- gate2                      pin 3
 // taped white- pusher motor mosfet         pin 4
 // taped brown- pusher motor switch         pin 5
 // taped yellow- trigger switch signal      pin 6
-// green- flywheel motor switch signal      pin 7                                                             
+// green- flywheel motor switch signal      pin 7
 // blue- firing mode button                 pin 8             // grey- flywheel motor mosfet              pin 8
 // taped orange- magazine gate              pin 9
 // brown- rotary encoder pushbutton         pin 10
@@ -24,6 +24,7 @@
 #include <LCD.h>                  // LCD library
 #include <LiquidCrystal_I2C.h>    // another LCD library
 #include <EnableInterrupt.h>      // the interrupt library
+#include <avr/wdt.h>              // watchdog stuff
 
 //---------------------------------OTHER CONSTANTS-----------------------------------------------------------------------------------
 const int burstConst = 3; // CONSTANT TO DETERMINE HOW MANY DARTS FIRED IN BURST FIRE MODE
@@ -47,16 +48,16 @@ const int magazineBlue = 16;
 #define sensePin A0     // analog pin for voltmeter
 
 //-----------------------------------TIMER VARIABLES----------------------------------------------------------------------------------
-long modeTimer; 
-volatile long pushTimer;   
+long modeTimer;
+volatile long pushTimer;
 long battTimer;
 volatile long triggerTimer;
-volatile long gate1Millis; 
+volatile long gate1Millis;
 volatile long gate2Millis;
-long revMillis;     
+long revMillis;
 
 //-----------------------------------ENCODER VARIABLES---------------------------------------------------------------------------------
-volatile int lastEncoded = 0; 
+volatile int lastEncoded = 0;
 volatile long encoderValue = 0;
 long lastencoderValue = 0;
 int lastMSB = 0;      // most significant bit
@@ -68,7 +69,7 @@ int modeDebounce = 0;       // debouncing for mode button
 int magazineDebounce = 0;   // debouncing for magazine detector
 
 //------------------------------------RANDOM VARIABLES----------------------------------------------------------------------------------
-int modeStatus = 0;       // constant to check mode:   0 = semi-auto fire, 1 = burst fire, 2 = automatic fire
+int modeStatus = 2;       // constant to check mode:   0 = semi-auto fire, 1 = burst fire, 2 = automatic fire
 volatile int fireCount = 0;        // variable to check how many times we've fired
 int muzzleSpeed = 0;      // variable which holds most recent muzzle speed
 int dartsTotal = 22;       // variable to check the total amount of darts in the magazine
@@ -81,13 +82,13 @@ int reading;          // current un-debounced value
 int counter = 0;      // variables for counting debounce timess
 int revLED = 0;         // analog variable for controlling the rev LED
 volatile int dartFired = 0;     // variable that tells when a dart is fired
- 
+
 //---------------------------------------LCD STUFF-------------------------------------------------------------------------------------
 LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7); // 0x27 is the I2C bus address for an unmodified module
 
 
-//----------------------------------------SETUP STUFF----------------------------------------------------------------------------------  
-void setup() 
+//----------------------------------------SETUP STUFF----------------------------------------------------------------------------------
+void setup()
 {
   pinMode(pushFet, OUTPUT);     // enable pin stuff
   pinMode(pushSwitch, INPUT);
@@ -101,27 +102,28 @@ void setup()
   pinMode(encoderPin1, INPUT);
   pinMode(encoderPin2, INPUT);
   digitalWrite(encoderPin1, HIGH); //turning pullup resistor on
-  digitalWrite(encoderPin2, HIGH); 
-  digitalWrite(encoderButton, HIGH); 
-  
+  digitalWrite(encoderPin2, HIGH);
+  digitalWrite(encoderButton, HIGH);
+
 
   enableInterrupt(pushSwitch, semi, RISING);     // enable interrupt stuff
   enableInterrupt(trigSwitch, trigger, RISING);
   enableInterrupt(gatePin1, gate1, FALLING);    // stuff for photogates
-  enableInterrupt(gatePin2, gate2, FALLING);                                         
+  enableInterrupt(gatePin2, gate2, FALLING);
   enableInterrupt(encoderPin1, updateEncoder, CHANGE);
-  enableInterrupt(encoderPin2, updateEncoder, CHANGE);  
+  enableInterrupt(encoderPin2, updateEncoder, CHANGE);
 
   analogReference(DEFAULT);     // setting voltage reference to 5V
-  
+
   Serial.begin(9600);
   Serial.println("Welcome to the SwagBlaster v1");
 
- LCDstart(); // lcd start routine
+ watchHuskySetup(); // setup watchdog
 
+ LCDstart(); // lcd start routine
 }
 
-void loop() 
+void loop()
 {
 //-------------------------------------MODE SWITCH CHECKER-----------------------------------------------------------------------------
   if (digitalRead(modeSwitch))    // if the glowy button pressed, change modes
@@ -131,14 +133,14 @@ void loop()
       modeDebounce++;
       return;
     }
-    modeDebounce = 0;  
+    modeDebounce = 0;
     modeChange();
   }
   else
   {
     modeDebounce = 0;
   }
-//-------------------------------------BATTERY CHECKER---------------------------------------------------------------------------------  
+//-------------------------------------BATTERY CHECKER---------------------------------------------------------------------------------
   if (millis() - battTimer > 250)    // when to update battery
   {
      LCDupdate(1);
@@ -159,7 +161,7 @@ void loop()
     muzzleSpeed = speed;
     LCDupdate(0);
   }
-  gate1Millis = 0;      // reset the gate milli 
+  gate1Millis = 0;      // reset the gate milli
   gate2Millis = 0;
   }
 //----------------------------------------DART FIRED -----------------------------------------------------------------------------------
@@ -169,7 +171,7 @@ if (dartFired == 1)
     dartsLeft--;    // decrement dartsLeft by one
     encoderValue = encoderValue - 4;    // decrement encoderValue by 4
     revLED = 25;   // -----------------------------this is what the lights go back to every time a dart is fired
-    analogWrite(revLEDPin, revLED*2); // updating the rev LED 
+    analogWrite(revLEDPin, revLED*2); // updating the rev LED
     if (dartsLeft == -1)
     {
       dartsLeft = 0;
@@ -216,7 +218,7 @@ if (dartFired == 1)
     updateDarts = 0;
 //    Serial.println("darts updated");
   }
-  
+
 //------------------------------------TRIGGER DEBOUNCING--------------------------------------------------------------------------------
   reading = digitalRead(trigSwitch);
 
@@ -226,10 +228,10 @@ if (dartFired == 1)
   }
   if(reading != trigState)
   {
-     counter++; 
+     counter++;
   }
   // If the Input has shown the same value for long enough let's switch it
-  if(counter >= 30)     // 20 IS DEBOUNCECOUNT
+  if(counter >= 50)     // 50 IS DEBOUNCECOUNT
   {
     counter = 0;
     trigState = reading;
@@ -242,7 +244,7 @@ if (dartFired == 1)
   }
   if(reading != magazineOut)
   {
-     magazineDebounce++; 
+     magazineDebounce++;
   }
   // If the Input has shown the same value for long enough let's switch it
   if(magazineDebounce > 5000)     // 5000 IS DEBOUNCECOUNT
@@ -288,7 +290,7 @@ if (dartFired == 1)
     revMillis = millis();
     analogWrite(revLEDPin, revLED*2);
   }
-  else if ((revMillis + 50) < millis() && (revLED != 0))      // decreasing 
+  else if ((revMillis + 50) < millis() && (revLED != 0))      // decreasing
   {
 //        Serial.println("crashingggg");
     if (revLED > 42)    // faster decreasing if high
@@ -305,9 +307,10 @@ if (dartFired == 1)
   }
 
 
-
-// end of loop---
+  wdt_reset();
+// end of loop----------------------------------------------------------------
 }
+
 
 //-----------------------------------MODECHANGE FUNCTION----------------------------------------------------------------------------------
 void modeChange()
@@ -318,7 +321,7 @@ void modeChange()
     return;
   }
    modeStatus++;  // increment!
-   Serial.println(modeStatus);  
+   Serial.println(modeStatus);
    if (modeStatus > 2)   // if firing mode is above 2, reduce the mode to 0
    {
     modeStatus = 0;
@@ -336,11 +339,8 @@ void modeChange()
    else if (modeStatus == 2)
    {
     enableInterrupt(pushSwitch,automatic,RISING);
-//    Serial.println("we in mode 2");    
+//    Serial.println("we in mode 2");
    }
- lcd.off();
- delay(25);
- lcd.on();
  LCDupdate(4);
  LCDupdate(2);    //update the firing mode on the LCD
  modeTimer = millis();
@@ -355,7 +355,7 @@ void trigger()
     return;
   }
   digitalWrite(pushFet, HIGH);
-//                                               Serial.println("trigger pulled");
+                                               Serial.println("trigger pulled");
   fireCount = 0;
 }
 
@@ -403,7 +403,7 @@ void automatic()
   }
 }
 
-//------------------------------------GATE1 INTERRUPT----------------------------------------------------------------------------------------          
+//------------------------------------GATE1 INTERRUPT----------------------------------------------------------------------------------------
 void gate1()
 // stuff for photogate interrupts
 {
@@ -440,17 +440,17 @@ void updateEncoder()
 {
     int MSB = digitalRead(encoderPin1); //MSB = most significant bit
     int LSB = digitalRead(encoderPin2); //LSB = least significant bit
-  
+
     int encoded = (MSB << 1) |LSB; //converting the 2 pin value to single number
     int sum  = (lastEncoded << 2) | encoded; //adding it to the previous encoded value
-  
+
     if(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) encoderValue ++;
     if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) encoderValue --;
-  
+
     lastEncoded = encoded; //store this value for next time
     updateDarts = 1;
   }
-  
+
 //-------------------------------------CUSTOM CHARACTER STUFF----------------------------------------------------------------------------------
 byte battleft[8] = {
   B00111,
@@ -492,52 +492,48 @@ byte battright[8] = {
 //----------------------------------------LCD START FuNCTION----------------------------------------------------------------------------------
 void LCDstart()
 {
-  Serial.println("doing lcd stuff"); 
+  Serial.println("doing lcd stuff");
   lcd.begin(20, 4);     // initialize LCD
   lcd.setBacklightPin(3,POSITIVE);      // initialize backlight
   lcd.backlight(); // turn backlight on
-  
+
   lcd.createChar(0,battleft);         // create custom characters
   lcd.createChar(1,battfull);
   lcd.createChar(2,battempty);
-  lcd.createChar(3,battright);   
-  
+  lcd.createChar(3,battright);
+
   lcd.clear();      // clear
   lcd.setCursor(3,0);       // display title and stuff
   lcd.print("Welcome to the");
   lcd.setCursor(2,1);
   lcd.print("SwagBlaster 3001");
-  delay(750);
+  delay(250);
+  wdt_reset();
   lcd.setCursor(0,3);
   lcd.print("Loading:");      // do the fancy loading bar thing
   digitalWrite(magazineRed, HIGH);    // turn on magazine gate LED
   digitalWrite(magazineBlue, LOW);
   for (int i=0; i<12; i++)
   {
-    delay(random(50,420));      // delay for random time 
+    delay(random(25,75));      // delay for random time
     lcd.print(char(255));
     analogWrite(revLEDPin, i*12);
+    wdt_reset();
   }
-  delay(750);
+  delay(150);
   lcd.setCursor(0,3);       // clear the bottom line
   lcd.print("                    ");
-  lcd.setCursor(2,3);
-  lcd.print("Loading Complete");
-  delay(1200);
-  lcd.setCursor(0,3);       // clear the bottom line
-  lcd.print("                    ");
+  wdt_reset();
   for (int i=0; i<2; i++)
   {
-    lcd.setCursor(6,3);
-    lcd.print("Have fun!");     // do the flashy have fun
-    delay(350);
-    lcd.setCursor(6,3);
-    lcd.print("         ");
-    delay(150);
+    lcd.setCursor(2,3);
+    lcd.print("Loading Complete");     // do the flashy have fun
+    delay(175);
+    lcd.setCursor(0,3);
+    lcd.print("                    ");
+    delay(50);
+    wdt_reset();
   }
-  lcd.setCursor(6,3);
-  lcd.print("Have fun!");
-  delay(1000);
   lcd.clear();      // clear for next display
 
   lcd.home();
@@ -556,6 +552,7 @@ void LCDstart()
   LCDupdate(3);
   Serial.println("done with LCD stuff");
   analogWrite(revLEDPin, 0);
+  wdt_reset();
   return;
 }
 
@@ -566,11 +563,12 @@ void LCDupdate(int m)
   if (m==0)
   {
     lcd.setCursor(0,0);
-    lcd.print("                    ");  
-    lcd.setCursor(0,0); 
+    lcd.print("                    ");
+    lcd.setCursor(0,0);
     lcd.print("Muzzle Speed: ");
     lcd.print(muzzleSpeed);
-    lcd.print(" fps");
+    lcd.setCursor(17,0);
+    lcd.print("fps");
     return;
   }
   if (m==1)
@@ -582,28 +580,28 @@ void LCDupdate(int m)
     lcd.setCursor(13,1);
     lcd.print("V ");
     lcd.setCursor(16,1);
-    if (voltage > 1.2*batteryCells)   // this is higher end threshold for NiMH battery
+    if (voltage > 1.3*batteryCells)   // this is higher end threshold for NiMH battery
     {
       lcd.write(byte(1));
       lcd.write(byte(1));
       lcd.write(byte(1));
       return;
     }
-    if (voltage > 1.1*batteryCells)   // medium ish
+    if (voltage > 1.25*batteryCells)   // medium ish
     {
+      lcd.write(byte(1));
+      lcd.write(byte(1));
       lcd.write(byte(2));
-      lcd.write(byte(1));
-      lcd.write(byte(1));
       return;
     }
-     if (voltage > batteryCells)    // low threshold
+     if (voltage > 1.2*batteryCells)    // low threshold
     {
-      lcd.write(byte(2));
-      lcd.write(byte(2));
       lcd.write(byte(1));
+      lcd.write(byte(2));
+      lcd.write(byte(2));
       return;
     }
-        // replace your batteries!
+    // replace your batteries!
      lcd.write(byte(2));
      lcd.write(byte(2));
      lcd.write(byte(2));
@@ -611,7 +609,7 @@ void LCDupdate(int m)
   }
   if (m==2)     //this will write out the firing mode
   {
-    lcd.setCursor(0,2);   
+    lcd.setCursor(0,2);
     if (modeStatus==0)    // depending on mode status
     {
       lcd.print("Semi-Automatic mode ");
@@ -621,8 +619,8 @@ void LCDupdate(int m)
     {
       lcd.print("Burst-Fire mode     ");
       return;
-    } 
-    lcd.print("Automatic-Fire mode ");   
+    }
+    lcd.print("Automatic-Fire mode ");
   }
   if (m==3)   // this will write out the dart counter
   {
@@ -668,11 +666,29 @@ void LCDupdate(int m)
 }
 
 
+void watchHuskySetup(void)
+{
+  cli();  // disable all interrupts
+  wdt_reset(); // reset the WDT timer
+  /*
+   WDTCSR configuration:
+   WDIE = 1: Interrupt Enable
+   WDE = 1 :Reset Enable
+   WDP3 = 0 :For 2000ms Time-out
+   WDP2 = 1 :For 2000ms Time-out
+   WDP1 = 1 :For 2000ms Time-out
+   WDP0 = 1 :For 2000ms Time-out
+  */
+  // Enter Watchdog Configuration mode:
+  WDTCSR |= (1<<WDCE) | (1<<WDE);
+  // Set Watchdog settings:
+   WDTCSR = (0<<WDIE) | (1<<WDE) | (0<<WDP3) | (1<<WDP2) | (0<<WDP1) | (1<<WDP0);
+  sei();
+  wdt_reset();
+}
 
 
 
 //-------------------------------THE FUNCTION GRAVEYARD-----------------------------------------------------------------------------------------
-/* 
-*/ 
-
-
+/*
+*/
