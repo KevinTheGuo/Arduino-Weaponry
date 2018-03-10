@@ -515,9 +515,9 @@ void LCDstart()
   digitalWrite(magazineBlue, LOW);
   for (int i=0; i<12; i++)
   {
-    delay(random(25,75));      // delay for random time
+    delay(random(10,100));      // delay for random time
     lcd.print(char(255));
-    analogWrite(revLEDPin, i*12);
+    analogWrite(revLEDPin, i*9);
     wdt_reset();
   }
   delay(150);
