@@ -106,7 +106,7 @@ void setup()
   digitalWrite(encoderButton, HIGH);
 
 
-  enableInterrupt(pushSwitch, semi, RISING);     // enable interrupt stuff
+  enableInterrupt(pushSwitch, automatic, RISING);     // enable interrupt stuff
   enableInterrupt(trigSwitch, trigger, RISING);
   enableInterrupt(gatePin1, gate1, FALLING);    // stuff for photogates
   enableInterrupt(gatePin2, gate2, FALLING);
@@ -311,12 +311,11 @@ if (dartFired == 1)
 // end of loop----------------------------------------------------------------
 }
 
-
 //-----------------------------------MODECHANGE FUNCTION----------------------------------------------------------------------------------
 void modeChange()
 // button got pressed, change the mode
 {
-  if (millis() - modeTimer < 750)
+  if (millis() - modeTimer < 250)
   {
     return;
   }
@@ -342,7 +341,6 @@ void modeChange()
 //    Serial.println("we in mode 2");
    }
  LCDupdate(4);
- LCDupdate(2);    //update the firing mode on the LCD
  modeTimer = millis();
  return;
 }
@@ -517,7 +515,7 @@ void LCDstart()
   {
     delay(random(10,100));      // delay for random time
     lcd.print(char(255));
-    analogWrite(revLEDPin, i*9);
+    analogWrite(revLEDPin, i*13);
     wdt_reset();
   }
   delay(150);
@@ -650,6 +648,25 @@ void LCDupdate(int m)
   }
   if (m==4)       // every time we reset the LCD
   {
+   LCDrestart();
+  }
+}
+
+
+//---------------------------------------LCD RESTART FUNCTION------------------------------------------------------------------------------------
+void LCDrestart(void)
+{
+  lcd.begin(20, 4);     // restart LCD, see if this will fix gibberish?
+  lcd.setBacklightPin(3,POSITIVE);      // initialize backlight
+  lcd.backlight(); // turn backlight on
+
+  lcd.createChar(0,battleft);         // create custom characters
+  lcd.createChar(1,battfull);
+  lcd.createChar(2,battempty);
+  lcd.createChar(3,battright);
+
+  lcd.home();
+  lcd.print("SwagBlaster 3001");
   lcd.setCursor(0,1);
   lcd.print("Battery:       ");
   lcd.write(byte(0));
@@ -658,13 +675,11 @@ void LCDupdate(int m)
   lcd.setCursor(0,3);
   lcd.print("Darts Left:   /");
 
-  LCDupdate(0);    // the first round of updates
+  // the first round of updates
   LCDupdate(1);
   LCDupdate(2);
   LCDupdate(3);
-  }
 }
-
 
 void watchHuskySetup(void)
 {
@@ -686,9 +701,3 @@ void watchHuskySetup(void)
   sei();
   wdt_reset();
 }
-
-
-
-//-------------------------------THE FUNCTION GRAVEYARD-----------------------------------------------------------------------------------------
-/*
-*/
